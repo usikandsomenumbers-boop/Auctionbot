@@ -259,53 +259,52 @@
     `).join('');
   }
 
-  async function placeBid() {
-    if (isSubmitting || !user) return;
+async function placeBid() {
+  if (isSubmitting || !user) return;
+  
+  isSubmitting = true;
+  btnPlace.disabled = true;
+  btnPlace.textContent = 'Отправка...';
+
+  try {
+    const payload = {
+      action: 'placeBid',
+      telegram_id: user.id,
+      username: user.username || user.first_name || ('user' + user.id),
+      amount: currentAmount
+    };
+
+    // === NEW WORKING METHOD ===
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams(payload).toString()
+    });
+
+    const text = await res.text();
+    console.log('Server response:', text);
+
+    const data = JSON.parse(text);
     
-    isSubmitting = true;
-    btnPlace.disabled = true;
-    btnPlace.textContent = 'Отправка...';
-
-    try {
-      const payload = {
-        action: 'placeBid',
-        telegram_id: user.id,
-        username: user.username || user.first_name || ('user' + user.id),
-        amount: currentAmount
-      };
-
-      console.log('Sending:', payload);
-
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const text = await res.text();
-      console.log('Response:', text);
-
-      const data = JSON.parse(text);
-      
-      if (data.success) {
-        tg.showAlert(data.message || 'Ставка принята!');
-        currentAmount = 0;
-        updateAmountUI();
-        await fetchBids();
-      } else {
-        tg.showAlert(data.error || 'Ошибка');
-      }
-    } catch (err) {
-      console.error(err);
-      tg.showAlert('Ошибка сети: ' + err.message);
-    } finally {
-      isSubmitting = false;
-      btnPlace.disabled = false;
-      btnPlace.textContent = 'Сделать ставку';
+    if (data.success) {
+      tg.showAlert(data.message || 'Ставка принята!');
+      currentAmount = 0;
+      updateAmountUI();
+      await fetchBids();
+    } else {
+      tg.showAlert(data.error || 'Ошибка');
     }
+  } catch (err) {
+    console.error(err);
+    tg.showAlert('Ошибка сети: ' + err.message);
+  } finally {
+    isSubmitting = false;
+    btnPlace.disabled = false;
+    btnPlace.textContent = 'Сделать ставку';
   }
+}
 
   // Load + poll every 2.5 sec
   fetchBids();

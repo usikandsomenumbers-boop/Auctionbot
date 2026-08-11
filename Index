@@ -187,7 +187,7 @@
 
   <script>
     // ========== CONFIG ==========
-    const API_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE'; // ← paste your Web App URL
+    const API_URL = 'https://script.google.com/macros/s/AKfycbx4BnOm7VNDmssS0a7Cu4fsYIk8h5ZbFtz4tZvouOj10ZAFENo1mILrLteQypJ0aUD3mQ/exec'; // ← paste your Web App URL
     const STEP = 50;
     // ============================
 

@@ -187,7 +187,7 @@
 
   <script>
     // ========== CONFIG ==========
-    const API_URL = 'https://script.google.com/macros/s/AKfycbyC5SRmDTbNmpZM0p8ri_RifgWry4KR3bnjEjyb6DRDSh8T3IajsaAzii8tivEk0WDytQ/exec?action=getBids'; // ← paste your Web App URL
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxdpumqeaY5Y4xH_v4yo60lqCbDanBLsdRlzQmvwqcMOVnG2p1T-seMeEsv60-AaWQJWg/exec'; // ← paste your Web App URL
     const STEP = 50;
     // ============================
 

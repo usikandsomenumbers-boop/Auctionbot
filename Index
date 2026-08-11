@@ -23,15 +23,8 @@
       color: #ff6b6b;
     }
     .timer.ended { color: #888; }
-    .header {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-    .max-bid-label {
-      font-size: 13px;
-      opacity: 0.65;
-      margin-bottom: 2px;
-    }
+    .header { text-align: center; margin-bottom: 16px; }
+    .max-bid-label { font-size: 13px; opacity: 0.65; margin-bottom: 2px; }
     .max-bid {
       font-size: 32px;
       font-weight: 700;
@@ -53,9 +46,7 @@
       font-size: 15px;
     }
     .bid-item:last-child { border-bottom: none; }
-    .bid-item.my-bid {
-      background: rgba(51, 144, 236, 0.18);
-    }
+    .bid-item.my-bid { background: rgba(51, 144, 236, 0.18); }
     .bid-name { opacity: 0.9; }
     .bid-amount { font-weight: 600; }
     .empty {
@@ -73,9 +64,7 @@
     }
     .bid-panel {
       position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      bottom: 0; left: 0; right: 0;
       background: var(--tg-theme-bg-color, #1c1c1e);
       border-top: 1px solid rgba(255,255,255,0.1);
       padding: 12px 16px 22px;
@@ -83,55 +72,32 @@
       flex-direction: column;
       gap: 10px;
     }
-    .controls {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .controls { display: flex; align-items: center; gap: 10px; }
     .btn {
-      width: 48px;
-      height: 48px;
-      border: none;
-      border-radius: 12px;
+      width: 48px; height: 48px;
+      border: none; border-radius: 12px;
       background: var(--tg-theme-button-color, #3390ec);
       color: var(--tg-theme-button-text-color, #fff);
-      font-size: 24px;
-      font-weight: 600;
-      cursor: pointer;
-      flex-shrink: 0;
+      font-size: 24px; font-weight: 600;
+      cursor: pointer; flex-shrink: 0;
     }
     .btn:active { opacity: 0.75; }
     input {
-      flex: 1;
-      height: 48px;
-      border: none;
-      border-radius: 12px;
+      flex: 1; height: 48px;
+      border: none; border-radius: 12px;
       background: var(--tg-theme-secondary-bg-color, #2c2c2e);
       color: var(--tg-theme-text-color, #fff);
-      font-size: 20px;
-      font-weight: 600;
-      text-align: center;
-      outline: none;
+      font-size: 20px; font-weight: 600;
+      text-align: center; outline: none;
     }
     .place-btn {
-      height: 50px;
-      border: none;
-      border-radius: 12px;
+      height: 50px; border: none; border-radius: 12px;
       background: var(--tg-theme-button-color, #3390ec);
       color: var(--tg-theme-button-text-color, #fff);
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
+      font-size: 16px; font-weight: 600; cursor: pointer;
     }
-    .place-btn:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-    .hint {
-      font-size: 12px;
-      text-align: center;
-      opacity: 0.55;
-    }
+    .place-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .hint { font-size: 12px; text-align: center; opacity: 0.55; }
   </style>
 </head>
 <body>
@@ -160,8 +126,8 @@
   </div>
 
   <script>
-    // ========== ТВОЙ APPS SCRIPT ==========
-    const API_URL = 'https://script.google.com/macros/s/AKfycbxK-6WrnhaMfLn_bgFXadcXDL_6XIe4XD-4PLHBw4HzZJI7bSUxc091hnV1WjkCPu2Wjw/exec';
+    // ========== ВСТАВЬ НОВЫЙ URL ПОСЛЕ ДЕПЛОЯ ==========
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzjJIyVJB04DzaUuxtQLxR2TIYFSdiEouSlmvXqHRbad1RSD1EYmWEMEL1tpYS0VBf5/exec';
 
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -179,7 +145,6 @@
 
     function updateTimer() {
       if (!endTime) return;
-
       const left = new Date(endTime) - Date.now();
       const el = document.getElementById('timer');
 
@@ -216,7 +181,6 @@
         maxBid.toLocaleString('ru-RU') + ' ₽';
 
       const list = document.getElementById('bidsList');
-
       if (!data.bids || data.bids.length === 0) {
         list.innerHTML = '<div class="empty">Пока нет ставок</div>';
       } else {
@@ -234,9 +198,7 @@
       }
 
       updateTimer();
-      if (!timerInterval) {
-        timerInterval = setInterval(updateTimer, 1000);
-      }
+      if (!timerInterval) timerInterval = setInterval(updateTimer, 1000);
     }
 
     function escapeHtml(text) {
@@ -265,7 +227,6 @@
         tg.showAlert('Аукцион уже закончился');
         return;
       }
-
       if (!userId) {
         tg.showAlert('Открой через Telegram');
         return;
@@ -273,7 +234,6 @@
 
       const amount = parseInt(document.getElementById('bidInput').value) || 0;
       const btn = document.getElementById('placeBtn');
-
       btn.disabled = true;
       setStatus('Отправка...');
 
@@ -301,9 +261,7 @@
         } else {
           render(data);
           setStatus(data.message || 'Готово');
-          if (tg.HapticFeedback) {
-            tg.HapticFeedback.impactOccurred('medium');
-          }
+          if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
           setTimeout(() => setStatus(''), 2000);
         }
       } catch (e) {
@@ -327,7 +285,6 @@
 
     document.getElementById('placeBtn').onclick = placeBid;
 
-    // Старт
     loadBids();
     setInterval(loadBids, 4000);
   </script>

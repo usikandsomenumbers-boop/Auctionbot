@@ -188,7 +188,7 @@
  <script>
   // ========== CONFIG ==========
   // PASTE THE NEW URL HERE ↓
-  const API_URL = 'https://script.google.com/macros/s/AKfycbzo3u4UPpIutwEol6NBL5YXhnGrUOvcltx78_QabaSWPMPYfneqZjc3Ejs7KB_HkOC9yA/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbzrLdd1Vv8pjkqo6BuK0ftkMCEuaLI7QuA59d-8mIFnXOikpz0CNpr7AAxjzffyYC2YTQ/exec';
   const STEP = 50;
   // ============================
 

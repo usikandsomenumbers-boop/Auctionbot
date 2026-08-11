@@ -185,123 +185,132 @@
     <button class="btn-place" id="btnPlace">Сделать ставку</button>
   </div>
 
-  <script>
-    // ========== CONFIG ==========
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwVA7lHm3TePhY2KJ8-A40IszTFNDh8D286O2sh9ytgjmWrY4JdRKsKmmobDZer4ID1-Q/exec';
-    const STEP = 50;
-    // ============================
+ <script>
+  // ========== CONFIG ==========
+  // PASTE THE NEW URL HERE ↓
+  const API_URL = 'https://script.google.com/macros/s/AKfycbzXft7A_Tn8E30o5XEtIbgVgtQ2YNs116FrSuquHrm4--BoaPowK8aHRJu9Pj9SLS_cNw/exec';
+  const STEP = 50;
+  // ============================
 
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
-    tg.setHeaderColor('#1c1c1e');
-    tg.setBackgroundColor('#1c1c1e');
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#1c1c1e');
+  tg.setBackgroundColor('#1c1c1e');
 
-    let currentAmount = 0;
-    let user = null;
-    let isSubmitting = false;
+  let currentAmount = 0;
+  let user = null;
+  let isSubmitting = false;
 
-    // Get Telegram user
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-      user = tg.initDataUnsafe.user;
-    } else {
-      // For testing outside Telegram
-      user = { id: 123456789, username: 'test_user', first_name: 'Test' };
-    }
+  if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+    user = tg.initDataUnsafe.user;
+  } else {
+    user = { id: 123456789, username: 'test_user', first_name: 'Test' };
+  }
 
-    const maxBidEl = document.getElementById('maxBid');
-    const listEl = document.getElementById('biddersList');
-    const amountDisplay = document.getElementById('amountDisplay');
-    const btnPlace = document.getElementById('btnPlace');
+  const maxBidEl = document.getElementById('maxBid');
+  const listEl = document.getElementById('biddersList');
+  const amountDisplay = document.getElementById('amountDisplay');
+  const btnPlace = document.getElementById('btnPlace');
 
-    // Buttons
-    document.getElementById('btnPlus').addEventListener('click', () => {
-      currentAmount += STEP;
-      updateAmountUI();
-    });
+  document.getElementById('btnPlus').addEventListener('click', () => {
+    currentAmount += STEP;
+    updateAmountUI();
+  });
 
-    document.getElementById('btnMinus').addEventListener('click', () => {
-      currentAmount = 0; // - goes to 0
-      updateAmountUI();
-    });
+  document.getElementById('btnMinus').addEventListener('click', () => {
+    currentAmount = 0;
+    updateAmountUI();
+  });
 
-    btnPlace.addEventListener('click', placeBid);
+  btnPlace.addEventListener('click', placeBid);
 
-    function updateAmountUI() {
-      amountDisplay.textContent = currentAmount;
-    }
+  function updateAmountUI() {
+    amountDisplay.textContent = currentAmount;
+  }
 
-    async function fetchBids() {
-      try {
-        // Important: no ?action=... needed anymore
-        const res = await fetch(API_URL);
-        const data = await res.json();
-        
-        if (!data.success) throw new Error(data.error || 'Ошибка');
-        
-        maxBidEl.textContent = data.maxBid + ' ₽';
-        renderList(data.bids);
-      } catch (err) {
-        console.error(err);
-        listEl.innerHTML = `<div class="error">Ошибка загрузки</div>`;
-      }
-    }
-
-    function renderList(bids) {
-      if (!bids || bids.length === 0) {
-        listEl.innerHTML = `<div class="empty-state">Пока нет ставок</div>`;
-        return;
-      }
-
-      listEl.innerHTML = bids.map((b, i) => `
-        <div class="bidder-item">
-          <span class="bidder-rank">${i + 1}.</span>
-          <span class="bidder-name">@${b.username || 'user' + b.telegram_id}</span>
-          <span class="bidder-amount">${b.bid_amount} ₽</span>
-        </div>
-      `).join('');
-    }
-
-    async function placeBid() {
-      if (isSubmitting || !user) return;
+  async function fetchBids() {
+    try {
+      const res = await fetch(API_URL);
+      const data = await res.json();
       
-      isSubmitting = true;
-      btnPlace.disabled = true;
-      btnPlace.textContent = 'Отправка...';
-
-      try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8'   // ← important for CORS
-          },
-          body: JSON.stringify({
-            action: 'placeBid',
-            telegram_id: user.id,
-            username: user.username || user.first_name || ('user' + user.id),
-            amount: currentAmount
-          })
-        });
-
-        const data = await res.json();
-        
-        if (data.success) {
-          tg.showAlert(data.message || 'Ставка принята!');
-          currentAmount = 0;
-          updateAmountUI();
-          await fetchBids(); // refresh immediately
-        } else {
-          tg.showAlert(data.error || 'Ошибка');
-        }
-      } catch (err) {
-        console.error(err);
-        tg.showAlert('Ошибка сети');
-      } finally {
-        isSubmitting = false;
-        btnPlace.disabled = false;
-        btnPlace.textContent = 'Сделать ставку';
-      }
+      if (!data.success) throw new Error(data.error || 'Ошибка');
+      
+      maxBidEl.textContent = data.maxBid + ' ₽';
+      renderList(data.bids);
+    } catch (err) {
+      console.error(err);
+      listEl.innerHTML = `<div class="error">Ошибка загрузки</div>`;
     }
+  }
+
+  function renderList(bids) {
+    if (!bids || bids.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">Пока нет ставок</div>`;
+      return;
+    }
+
+    listEl.innerHTML = bids.map((b, i) => `
+      <div class="bidder-item">
+        <span class="bidder-rank">${i + 1}.</span>
+        <span class="bidder-name">@${b.username || 'user' + b.telegram_id}</span>
+        <span class="bidder-amount">${b.bid_amount} ₽</span>
+      </div>
+    `).join('');
+  }
+
+  async function placeBid() {
+    if (isSubmitting || !user) return;
+    
+    isSubmitting = true;
+    btnPlace.disabled = true;
+    btnPlace.textContent = 'Отправка...';
+
+    try {
+      const payload = {
+        action: 'placeBid',
+        telegram_id: user.id,
+        username: user.username || user.first_name || ('user' + user.id),
+        amount: currentAmount
+      };
+
+      console.log('Sending:', payload);
+
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await res.text();
+      console.log('Response:', text);
+
+      const data = JSON.parse(text);
+      
+      if (data.success) {
+        tg.showAlert(data.message || 'Ставка принята!');
+        currentAmount = 0;
+        updateAmountUI();
+        await fetchBids();
+      } else {
+        tg.showAlert(data.error || 'Ошибка');
+      }
+    } catch (err) {
+      console.error(err);
+      tg.showAlert('Ошибка сети: ' + err.message);
+    } finally {
+      isSubmitting = false;
+      btnPlace.disabled = false;
+      btnPlace.textContent = 'Сделать ставку';
+    }
+  }
+
+  // Load + poll every 2.5 sec
+  fetchBids();
+  setInterval(fetchBids, 2500);
+</script>
 
     // Initial load + polling every 2.5 seconds
     fetchBids();

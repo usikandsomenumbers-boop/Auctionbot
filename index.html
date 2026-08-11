@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Аукцион</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #1c1c1e);
+      color: var(--tg-theme-text-color, #ffffff);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: 140px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .max-bid {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--tg-theme-button-color, #3390ec);
+    }
+    .max-bid-label {
+      font-size: 14px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    .bids-list {
+      background: var(--tg-theme-secondary-bg-color, #2c2c2e);
+      border-radius: 12px;
+      overflow: hidden;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    .bid-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-size: 15px;
+    }
+    .bid-item:last-child { border-bottom: none; }
+    .bid-item.my-bid {
+      background: rgba(51, 144, 236, 0.15);
+    }
+    .bid-name { opacity: 0.9; }
+    .bid-amount { font-weight: 600; }
+    .empty {
+      text-align: center;
+      padding: 30px;
+      opacity: 0.5;
+    }
+
+    /* Нижняя панель ставки */
+    .bid-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--tg-theme-bg-color, #1c1c1e);
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding: 12px 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn {
+      width: 48px;
+      height: 48px;
+      border: none;
+      border-radius: 12px;
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+      font-size: 22px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:active { opacity: 0.8; }
+    .input-wrap {
+      flex: 1;
+      position: relative;
+    }
+    input {
+      width: 100%;
+      height: 48px;
+      border: none;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color, #2c2c2e);
+      color: var(--tg-theme-text-color, #fff);
+      font-size: 18px;
+      font-weight: 600;
+      text-align: center;
+      outline: none;
+    }
+    .place-btn {
+      height: 48px;
+      border: none;
+      border-radius: 12px;
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .place-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .hint {
+      font-size: 12px;
+      text-align: center;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="max-bid-label">Текущая максимальная ставка</div>
+    <div class="max-bid" id="maxBid">0 ₽</div>
+  </div>
+
+  <div class="bids-list" id="bidsList">
+    <div class="empty">Пока нет ставок</div>
+  </div>
+
+  <div class="bid-panel">
+    <div class="hint">Минимальный шаг +50 ₽. Поставь 0 — уберёшь свою ставку</div>
+    <div class="controls">
+      <button class="btn" id="minusBtn">−</button>
+      <div class="input-wrap">
+        <input type="number" id="bidInput" value="0" min="0" step="50" />
+      </div>
+      <button class="btn" id="plusBtn">+</button>
+    </div>
+    <button class="place-btn" id="placeBtn">Сделать ставку</button>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // ===== Данные пользователя из Telegram =====
+    const user = tg.initDataUnsafe?.user || {};
+    const userId = user.id || 0;
+    const userName = user.username 
+      ? `@${user.username}` 
+      : (user.first_name || 'Аноним') + (user.last_name ? ' ' + user.last_name : '');
+
+    // ===== Локальное хранилище (для демо) =====
+    // В реальном проекте это должно быть на сервере!
+    let bids = JSON.parse(localStorage.getItem('auction_bids') || '[]');
+
+    const STEP = 50;
+
+    // ===== Функции =====
+    function getMaxBid() {
+      if (bids.length === 0) return 0;
+      return Math.max(...bids.map(b => b.amount));
+    }
+
+    function render() {
+      const max = getMaxBid();
+      document.getElementById('maxBid').textContent = max.toLocaleString('ru-RU') + ' ₽';
+
+      const list = document.getElementById('bidsList');
+      if (bids.length === 0) {
+        list.innerHTML = '<div class="empty">Пока нет ставок</div>';
+        return;
+      }
+
+      // Сортируем: самая свежая сверху
+      const sorted = [...bids].sort((a, b) => b.time - a.time);
+
+      list.innerHTML = sorted.map(b => `
+        <div class="bid-item ${b.userId === userId ? 'my-bid' : ''}">
+          <span class="bid-name">${b.name}</span>
+          <span class="bid-amount">${b.amount.toLocaleString('ru-RU')} ₽</span>
+        </div>
+      `).join('');
+    }
+
+    function updateInputFromMax() {
+      const max = getMaxBid();
+      const input = document.getElementById('bidInput');
+      // Предлагаем ставку = макс + 50, если у пользователя ещё нет ставки
+      const myBid = bids.find(b => b.userId === userId);
+      if (!myBid) {
+        input.value = max + STEP;
+      }
+    }
+
+    function placeBid() {
+      const amount = parseInt(document.getElementById('bidInput').value) || 0;
+      const max = getMaxBid();
+
+      // Удаляем старую ставку этого пользователя
+      bids = bids.filter(b => b.userId !== userId);
+
+      if (amount === 0) {
+        // Просто убрали ставку
+        saveAndRender();
+        return;
+      }
+
+      // Проверка минимального шага
+      if (amount < max + STEP && amount !== max) {
+        // Разрешаем только если это повышение минимум на STEP
+        // (если amount == max — это странно, но не блокируем жёстко)
+        if (amount <= max) {
+          tg.showAlert(`Ставка должна быть минимум ${max + STEP} ₽`);
+          return;
+        }
+      }
+
+      bids.push({
+        userId,
+        name: userName,
+        amount,
+        time: Date.now()
+      });
+
+      saveAndRender();
+      tg.HapticFeedback.impactOccurred('medium');
+    }
+
+    function saveAndRender() {
+      localStorage.setItem('auction_bids', JSON.stringify(bids));
+      render();
+      updateInputFromMax();
+    }
+
+    // ===== События =====
+    document.getElementById('plusBtn').onclick = () => {
+      const input = document.getElementById('bidInput');
+      input.value = (parseInt(input.value) || 0) + STEP;
+    };
+
+    document.getElementById('minusBtn').onclick = () => {
+      const input = document.getElementById('bidInput');
+      const val = (parseInt(input.value) || 0) - STEP;
+      input.value = Math.max(0, val);
+    };
+
+    document.getElementById('placeBtn').onclick = placeBid;
+
+    // ===== Старт =====
+    render();
+    updateInputFromMax();
+
+    // Показываем имя пользователя в консоли (для отладки)
+    console.log('Пользователь:', userName, 'ID:', userId);
+  </script>
+</body>
+</html>

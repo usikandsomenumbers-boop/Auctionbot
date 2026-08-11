@@ -161,7 +161,7 @@
 
   <script>
     // ========== ТВОЙ APPS SCRIPT ==========
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwHGF8RyQiINv7RFA4278aB66DObdGEZTT6hbXzqzP1uzsjOYroW8kAi75wphkZjNz6jQ/exec';
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxK-6WrnhaMfLn_bgFXadcXDL_6XIe4XD-4PLHBw4HzZJI7bSUxc091hnV1WjkCPu2Wjw/exec';
 
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -179,10 +179,10 @@
 
     function updateTimer() {
       if (!endTime) return;
-      
+
       const left = new Date(endTime) - Date.now();
       const el = document.getElementById('timer');
-      
+
       if (left <= 0) {
         el.textContent = 'Аукцион завершён';
         el.classList.add('ended');
@@ -191,32 +191,32 @@
         clearInterval(timerInterval);
         return;
       }
-      
+
       const h = Math.floor(left / 3600000);
       const m = Math.floor((left % 3600000) / 60000);
       const s = Math.floor((left % 60000) / 1000);
-      
-      el.textContent = 
+
+      el.textContent =
         String(h).padStart(2, '0') + ':' +
         String(m).padStart(2, '0') + ':' +
         String(s).padStart(2, '0');
     }
 
     function render(data) {
-      if (!data || !data.ok) {
+      if (!data || data.ok === false) {
         if (data && data.error) setStatus(data.error);
         return;
       }
-      
+
       maxBid = data.max_bid || 0;
       step = data.step || 50;
       endTime = data.end_time;
-      
-      document.getElementById('maxBid').textContent = 
+
+      document.getElementById('maxBid').textContent =
         maxBid.toLocaleString('ru-RU') + ' ₽';
-      
+
       const list = document.getElementById('bidsList');
-      
+
       if (!data.bids || data.bids.length === 0) {
         list.innerHTML = '<div class="empty">Пока нет ставок</div>';
       } else {
@@ -227,12 +227,12 @@
           </div>
         `).join('');
       }
-      
+
       const input = document.getElementById('bidInput');
       if (!input.matches(':focus')) {
         input.value = maxBid + step;
       }
-      
+
       updateTimer();
       if (!timerInterval) {
         timerInterval = setInterval(updateTimer, 1000);
@@ -251,7 +251,7 @@
 
     async function loadBids() {
       try {
-        const res = await fetch(API_URL + '?action=get&t=' + Date.now());
+        const res = await fetch(API_URL + '?t=' + Date.now());
         const data = await res.json();
         render(data);
       } catch (e) {
@@ -265,32 +265,38 @@
         tg.showAlert('Аукцион уже закончился');
         return;
       }
-      
+
       if (!userId) {
         tg.showAlert('Открой через Telegram');
         return;
       }
-      
+
       const amount = parseInt(document.getElementById('bidInput').value) || 0;
       const btn = document.getElementById('placeBtn');
-      
+
       btn.disabled = true;
       setStatus('Отправка...');
-      
+
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({
             initData: initData,
-            amount: amount
+            amount: amount,
+            user: {
+              id: user.id,
+              username: user.username || '',
+              first_name: user.first_name || '',
+              last_name: user.last_name || ''
+            }
           })
         });
-        
+
         const data = await res.json();
-        
-        if (data.error) {
-          tg.showAlert(data.error);
+
+        if (data.error || data.ok === false) {
+          tg.showAlert(data.error || 'Ошибка');
           setStatus('');
         } else {
           render(data);
@@ -305,7 +311,7 @@
         setStatus('');
         console.error(e);
       }
-      
+
       btn.disabled = isEnded;
     }
 
@@ -313,12 +319,12 @@
       const input = document.getElementById('bidInput');
       input.value = (parseInt(input.value) || 0) + step;
     };
-    
+
     document.getElementById('minusBtn').onclick = () => {
       const input = document.getElementById('bidInput');
       input.value = Math.max(0, (parseInt(input.value) || 0) - step);
     };
-    
+
     document.getElementById('placeBtn').onclick = placeBid;
 
     // Старт

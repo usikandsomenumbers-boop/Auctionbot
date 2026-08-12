@@ -62,6 +62,15 @@
     font-weight:700;
     letter-spacing:.5px;
   }
+  .countdown{
+    margin-top:10px;
+    font-size:15px;
+    font-weight:600;
+    color:var(--text-dim);
+  }
+  .countdown.ending{
+    color:var(--danger);
+  }
   .list-wrap{
     flex:1;
     padding: 6px 14px;
@@ -214,6 +223,7 @@
     </div>
     <div class="label">Текущая максимальная ставка</div>
     <div class="max-bid" id="maxBid">0 ₽</div>
+    <div class="countdown" id="countdown"></div>
   </div>
 
   <div class="list-wrap">
@@ -240,9 +250,10 @@
 // ======================================================
 // НАСТРОЙКИ — вставь сюда URL своего Google Apps Script
 // ======================================================
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw3SES6lDsmz4-7jDIdxnl2nJkjK6AOCi8uukEHladvPgj-l5v6Vu2ZdXs6Gz9I1C69/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwn3cnqRsy5BrNDl-RM_YPn5YAOsjNxN6QyKUGsXRYQljqZE6RZlFgtZBc5TK9wNLHT/exec";
 const BID_STEP = 50;
 const POLL_INTERVAL_MS = 3000;
+const POLL_JITTER_MS = 500; // случайный разброс, чтобы клиенты не били сервер одновременно
 
 // ------------------------------------------------------
 // Telegram init
@@ -269,9 +280,16 @@ const myUsername = tgUser
 // ------------------------------------------------------
 // State
 // ------------------------------------------------------
-let localAmount = 0;   // amount currently set in the stepper, not yet submitted
-let bids = [];          // last known list from server
+let localAmount = 0;      // amount currently set in the stepper, not yet submitted
+let bids = [];             // last known list from server
+let lastBidsSignature = ''; // to skip re-render when nothing changed
 let submitting = false;
+
+// Timer state: we only ever get auctionEndTime from the server, then
+// count down locally so we don't need to poll every second.
+let auctionEndTime = null;   // ms since epoch, or null if not set
+let clockOffsetMs = 0;       // serverTime - Date.now(), to correct for client clock drift
+let auctionEnded = false;
 
 const maxBidEl = document.getElementById('maxBid');
 const listBody = document.getElementById('listBody');
@@ -280,6 +298,7 @@ const minusBtn = document.getElementById('minusBtn');
 const plusBtn = document.getElementById('plusBtn');
 const submitBtn = document.getElementById('submitBtn');
 const toastEl = document.getElementById('toast');
+const countdownEl = document.getElementById('countdown');
 
 function showToast(msg) {
   toastEl.textContent = msg;
@@ -289,6 +308,10 @@ function showToast(msg) {
 }
 
 function renderList() {
+  const signature = JSON.stringify(bids);
+  if (signature === lastBidsSignature) return; // nothing changed, skip DOM work
+  lastBidsSignature = signature;
+
   if (!bids.length) {
     listBody.innerHTML = '<div class="state-msg">Пока нет ставок</div>';
     maxBidEl.textContent = '0 ₽';
@@ -318,27 +341,80 @@ function escapeHtml(str) {
 
 function renderStepper() {
   valueDisplay.textContent = localAmount;
-  minusBtn.disabled = localAmount <= 0;
-  submitBtn.disabled = submitting;
+  minusBtn.disabled = localAmount <= 0 || auctionEnded;
+  plusBtn.disabled = auctionEnded;
+  submitBtn.disabled = submitting || auctionEnded;
+  submitBtn.textContent = auctionEnded ? 'Аукцион завершён' : 'Сделать ставку';
+}
+
+// ------------------------------------------------------
+// Timer — purely local, driven off a fixed server timestamp.
+// We correct for client clock drift using serverTime returned
+// alongside the bids list, so we don't rely on the device's clock.
+// ------------------------------------------------------
+function formatDuration(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function tickCountdown() {
+  if (!auctionEndTime) {
+    countdownEl.textContent = '';
+    return;
+  }
+  const now = Date.now() + clockOffsetMs;
+  const remaining = auctionEndTime - now;
+
+  if (remaining <= 0) {
+    if (!auctionEnded) {
+      auctionEnded = true;
+      renderStepper();
+    }
+    countdownEl.textContent = 'Аукцион завершён';
+    countdownEl.classList.add('ending');
+    return;
+  }
+
+  auctionEnded = false;
+  countdownEl.textContent = 'До конца: ' + formatDuration(remaining);
+  countdownEl.classList.toggle('ending', remaining < 60000); // last minute highlight
 }
 
 // ------------------------------------------------------
 // Networking
 // ------------------------------------------------------
+function applyState(data) {
+  bids = data.bids || [];
+  renderList();
+
+  if (typeof data.serverTime === 'number') {
+    clockOffsetMs = data.serverTime - Date.now();
+  }
+  auctionEndTime = data.auctionEndTime || null;
+  tickCountdown();
+  renderStepper();
+}
+
 async function fetchList() {
   try {
     const res = await fetch(APPS_SCRIPT_URL, { method: 'GET' });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    bids = data.bids || [];
-    renderList();
+    applyState(data);
   } catch (err) {
-    listBody.innerHTML = '<div class="state-msg">Ошибка загрузки</div>';
+    if (!bids.length) {
+      listBody.innerHTML = '<div class="state-msg">Ошибка загрузки</div>';
+    }
     console.error(err);
   }
 }
 
 async function submitBid(amount) {
+  if (auctionEnded) return;
   submitting = true;
   renderStepper();
   try {
@@ -348,9 +424,13 @@ async function submitBid(amount) {
       body: JSON.stringify({ userId: myUserId, username: myUsername, amount })
     });
     const data = await res.json();
+    if (data.error === 'auction_ended') {
+      applyState(data);
+      showToast('Аукцион уже завершён');
+      return;
+    }
     if (data.error) throw new Error(data.error);
-    bids = data.bids || [];
-    renderList();
+    applyState(data);
     showToast(amount > 0 ? `Ставка ${amount} ₽ принята` : 'Ставка снята');
   } catch (err) {
     showToast('Не удалось отправить ставку');
@@ -365,30 +445,42 @@ async function submitBid(amount) {
 // Events
 // ------------------------------------------------------
 plusBtn.addEventListener('click', () => {
+  if (auctionEnded) return;
   localAmount += BID_STEP;
   renderStepper();
 });
 
 minusBtn.addEventListener('click', () => {
+  if (auctionEnded) return;
   localAmount = 0;
   renderStepper();
 });
 
 submitBtn.addEventListener('click', () => {
-  if (submitting) return;
+  if (submitting || auctionEnded) return;
   submitBid(localAmount);
 });
 
 // ------------------------------------------------------
 // Init
 // ------------------------------------------------------
+function scheduleNextPoll() {
+  const jitter = Math.random() * POLL_JITTER_MS;
+  setTimeout(async () => {
+    await fetchList();
+    scheduleNextPoll();
+  }, POLL_INTERVAL_MS + jitter);
+}
+
 (async function init() {
   await fetchList();
   // preload stepper with my existing bid, if any
   const mine = bids.find(b => String(b.userId) === myUserId);
   localAmount = mine ? mine.amount : 0;
   renderStepper();
-  setInterval(fetchList, POLL_INTERVAL_MS);
+
+  scheduleNextPoll();       // polling for the bid list
+  setInterval(tickCountdown, 1000); // local countdown, no network
 })();
 </script>
 </body>

@@ -1,9 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL);
-
 export default async function handler(req, res) {
-  // Allow requests from anywhere (needed for Telegram Mini App)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -13,6 +10,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL is missing' });
+    }
+
+    const sql = neon(process.env.DATABASE_URL);
+
     if (req.method === 'GET') {
       const bids = await sql`
         SELECT user_id as "userId", username, amount, updated_at as "updatedAt"
@@ -28,36 +31,51 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { userId, username, amount } = req.body;
+      let body = req.body;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch (e) {
+          return res.status(400).json({ error: 'Invalid JSON' });
+        }
+      }
+
+      const userId = String(body?.userId || '').trim();
+      const username = String(body?.username || 'unknown').trim();
+      const amount = Math.max(0, Math.floor(Number(body?.amount) || 0));
 
       if (!userId) {
         return res.status(400).json({ error: 'userId is required' });
       }
 
-      const cleanAmount = Math.max(0, Math.floor(Number(amount) || 0));
-      const cleanUsername = String(username || 'unknown').trim();
+      let accepted = false;
+      let reason = null;
 
-      // ===== Remove bid =====
-      if (cleanAmount === 0) {
+      if (amount === 0) {
+        // Remove own bid
         await sql`DELETE FROM bids WHERE user_id = ${userId}`;
-      } 
-      // ===== Place / update bid =====
-      else {
-        // Only accept if higher than current maximum
-        await sql`
-          INSERT INTO bids (user_id, username, amount, updated_at)
-          SELECT ${userId}, ${cleanUsername}, ${cleanAmount}, NOW()
-          WHERE ${cleanAmount} > (SELECT COALESCE(MAX(amount), 0) FROM bids)
-          ON CONFLICT (user_id) DO UPDATE
-          SET 
-            username = EXCLUDED.username,
-            amount = EXCLUDED.amount,
-            updated_at = NOW()
-          WHERE EXCLUDED.amount > (SELECT COALESCE(MAX(amount), 0) FROM bids)
-        `;
+        accepted = true;
+      } else {
+        // Get current max
+        const maxResult = await sql`SELECT COALESCE(MAX(amount), 0) as max FROM bids`;
+        const currentMax = maxResult[0].max;
+
+        if (amount > currentMax) {
+          // Accept the bid
+          await sql`
+            INSERT INTO bids (user_id, username, amount, updated_at)
+            VALUES (${userId}, ${username}, ${amount}, NOW())
+            ON CONFLICT (user_id) DO UPDATE
+            SET username = EXCLUDED.username,
+                amount = EXCLUDED.amount,
+                updated_at = NOW()
+          `;
+          accepted = true;
+        } else {
+          accepted = false;
+          reason = 'too_low';
+        }
       }
 
-      // Return the fresh list
+      // Always return fresh list
       const bids = await sql`
         SELECT user_id as "userId", username, amount, updated_at as "updatedAt"
         FROM bids
@@ -65,6 +83,8 @@ export default async function handler(req, res) {
       `;
 
       return res.status(200).json({
+        accepted,
+        reason,
         bids,
         maxBid: bids.length ? bids[0].amount : 0,
         serverTime: Date.now()
@@ -73,7 +93,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Server error' });
+    console.error('API Error:', err);
+    return res.status(500).json({ error: 'Server error', details: err.message });
   }
 }

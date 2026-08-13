@@ -418,8 +418,18 @@ async function submitBid(amount) {
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
+
     applyState(data);
-    showToast(amount > 0 ? `Ставка ${amount} ₽ принята` : 'Ставка снята');
+
+    if (amount === 0) {
+      showToast('Ставка снята');
+    } else if (data.accepted) {
+      showToast(`Ставка ${amount} ₽ принята`);
+    } else if (data.reason === 'too_low') {
+      showToast('Ставка слишком низкая');
+    } else {
+      showToast('Ставка не принята');
+    }
   } catch (err) {
     showToast('Не удалось отправить ставку');
     console.error(err);

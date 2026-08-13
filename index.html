@@ -248,12 +248,12 @@
 
 <script>
 // ======================================================
-// НАСТРОЙКИ — вставь сюда URL своего Google Apps Script
+// НАСТРОЙКИ
 // ======================================================
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwn3cnqRsy5BrNDl-RM_YPn5YAOsjNxN6QyKUGsXRYQljqZE6RZlFgtZBc5TK9wNLHT/exec";
+const API_URL = "/api/bids";          // ← теперь наш backend на Vercel
 const BID_STEP = 50;
 const POLL_INTERVAL_MS = 3000;
-const POLL_JITTER_MS = 500; // случайный разброс, чтобы клиенты не били сервер одновременно
+const POLL_JITTER_MS = 500;
 
 // ------------------------------------------------------
 // Telegram init
@@ -266,7 +266,6 @@ if (tg) {
 
 const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
 
-// Fallback for testing outside Telegram (opening the file directly in a browser)
 const myUserId = tgUser ? String(tgUser.id) : localStorage.getItem('demo_uid') || (() => {
   const id = 'demo_' + Math.floor(Math.random() * 100000);
   localStorage.setItem('demo_uid', id);
@@ -280,15 +279,13 @@ const myUsername = tgUser
 // ------------------------------------------------------
 // State
 // ------------------------------------------------------
-let localAmount = 0;      // amount currently set in the stepper, not yet submitted
-let bids = [];             // last known list from server
-let lastBidsSignature = ''; // to skip re-render when nothing changed
+let localAmount = 0;
+let bids = [];
+let lastBidsSignature = '';
 let submitting = false;
 
-// Timer state: we only ever get auctionEndTime from the server, then
-// count down locally so we don't need to poll every second.
-let auctionEndTime = null;   // ms since epoch, or null if not set
-let clockOffsetMs = 0;       // serverTime - Date.now(), to correct for client clock drift
+let auctionEndTime = null;
+let clockOffsetMs = 0;
 let auctionEnded = false;
 
 const maxBidEl = document.getElementById('maxBid');
@@ -309,7 +306,7 @@ function showToast(msg) {
 
 function renderList() {
   const signature = JSON.stringify(bids);
-  if (signature === lastBidsSignature) return; // nothing changed, skip DOM work
+  if (signature === lastBidsSignature) return;
   lastBidsSignature = signature;
 
   if (!bids.length) {
@@ -347,11 +344,6 @@ function renderStepper() {
   submitBtn.textContent = auctionEnded ? 'Аукцион завершён' : 'Сделать ставку';
 }
 
-// ------------------------------------------------------
-// Timer — purely local, driven off a fixed server timestamp.
-// We correct for client clock drift using serverTime returned
-// alongside the bids list, so we don't rely on the device's clock.
-// ------------------------------------------------------
 function formatDuration(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600);
@@ -381,12 +373,9 @@ function tickCountdown() {
 
   auctionEnded = false;
   countdownEl.textContent = 'До конца: ' + formatDuration(remaining);
-  countdownEl.classList.toggle('ending', remaining < 60000); // last minute highlight
+  countdownEl.classList.toggle('ending', remaining < 60000);
 }
 
-// ------------------------------------------------------
-// Networking
-// ------------------------------------------------------
 function applyState(data) {
   bids = data.bids || [];
   renderList();
@@ -401,7 +390,7 @@ function applyState(data) {
 
 async function fetchList() {
   try {
-    const res = await fetch(APPS_SCRIPT_URL, { method: 'GET' });
+    const res = await fetch(API_URL);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     applyState(data);
@@ -418,17 +407,16 @@ async function submitBid(amount) {
   submitting = true;
   renderStepper();
   try {
-    const res = await fetch(APPS_SCRIPT_URL, {
+    const res = await fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight
-      body: JSON.stringify({ userId: myUserId, username: myUsername, amount })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: myUserId,
+        username: myUsername,
+        amount: amount
+      })
     });
     const data = await res.json();
-    if (data.error === 'auction_ended') {
-      applyState(data);
-      showToast('Аукцион уже завершён');
-      return;
-    }
     if (data.error) throw new Error(data.error);
     applyState(data);
     showToast(amount > 0 ? `Ставка ${amount} ₽ принята` : 'Ставка снята');
@@ -474,13 +462,12 @@ function scheduleNextPoll() {
 
 (async function init() {
   await fetchList();
-  // preload stepper with my existing bid, if any
   const mine = bids.find(b => String(b.userId) === myUserId);
   localAmount = mine ? mine.amount : 0;
   renderStepper();
 
-  scheduleNextPoll();       // polling for the bid list
-  setInterval(tickCountdown, 1000); // local countdown, no network
+  scheduleNextPoll();
+  setInterval(tickCountdown, 1000);
 })();
 </script>
 </body>
